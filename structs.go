@@ -1,5 +1,7 @@
 package main
 
+import "github.com/gorilla/websocket"
+
 var GameTypes map[string]string = map[string]string{
 	"bullet":  "bullet",
 	"blitz":   "blitz",
@@ -8,6 +10,7 @@ var GameTypes map[string]string = map[string]string{
 }
 
 const ratingChange int64 = 10
+const roomRateEligibility int = 150
 
 type Player struct {
 	ID            int64  `json:"id"`
@@ -16,6 +19,7 @@ type Player struct {
 	BlitzRating   int64  `json:"blitz_rating"`
 	RapidRating   int64  `json:"rapid_rating"`
 	ClassicRating int64  `json:"classic_rating"`
+	Conn 		*websocket.Conn
 }
 
 type Game struct {
@@ -24,14 +28,15 @@ type Game struct {
 	Draw          bool   `json:"draw"`
 	GameType      string `json:"game_type"`
 	LoserID       int64  `json:"loser_id"`
+	URL           string `json:"url"`
 	WhitePlayerID int64  `json:"white"`
 	WinnerID      int64  `json:"winner_id"`
 }
 
 type Room struct {
-	ID         int64 `json:"id"`
-	PlayerID   int64 `json:"player_id"`
-	PlayerRate int64 `json:"player_rate"`
+	ID         int64  `json:"id"`
+	PlayerID   int64  `json:"player_id"`
+	PlayerRate int64  `json:"player_rate"`
 	GameType   string `json:"game_type"`
 }
 
