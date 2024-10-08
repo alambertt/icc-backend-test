@@ -1,6 +1,11 @@
 package main
 
-var GameTypes []string = []string{"bullet", "blitz", "rapid", "classic"}
+var GameTypes map[string]string = map[string]string{
+	"bullet":  "bullet",
+	"blitz":   "blitz",
+	"rapid":   "rapid",
+	"classic": "classic",
+}
 
 const ratingChange int64 = 10
 
@@ -14,15 +19,20 @@ type Player struct {
 }
 
 type Game struct {
-	ID          int64  `json:"id"`
-	BlackPlayer Player `json:"black"`
-	Draw        bool   `json:"draw"`
-	GameType    string `json:"game_type"`
-	Loser       Player `json:"loser"`
-	Rated       bool   `json:"rated"`
-	URL         string `json:"url"`
-	WhitePlayer Player `json:"white"`
-	Winner      Player `json:"winner"`
+	ID            int64  `json:"id"`
+	BlackPlayerID int64  `json:"black"`
+	Draw          bool   `json:"draw"`
+	GameType      string `json:"game_type"`
+	LoserID       int64  `json:"loser_id"`
+	WhitePlayerID int64  `json:"white"`
+	WinnerID      int64  `json:"winner_id"`
+}
+
+type Room struct {
+	ID         int64 `json:"id"`
+	PlayerID   int64 `json:"player_id"`
+	PlayerRate int64 `json:"player_rate"`
+	GameType   string `json:"game_type"`
 }
 
 func (p Player) ChangeRating(gameType string, up bool) {

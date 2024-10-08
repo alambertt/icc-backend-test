@@ -25,8 +25,8 @@ func GetPlayerQuery(db *sql.DB, id int) (*sql.Rows, error) {
 }
 
 func InsertGameQuery(db *sql.DB, game *Game) (sql.Result, error) {
-	query := "INSERT INTO games (id, url, rated, game_type, white_player_id, black_player_id, winner_id, loser_id, draw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	result, err := database.ExecuteMySQLNonQuery(db, query, game.ID, game.URL, game.Rated, game.GameType, game.WhitePlayer.ID, game.BlackPlayer.ID, game.Winner.ID, game.Loser.ID, game.Draw)
+	query := "INSERT INTO games (id, game_type, white_player_id, black_player_id, winner_id, loser_id, draw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	result, err := database.ExecuteMySQLNonQuery(db, query, game.ID, game.GameType, game.WhitePlayerID, game.BlackPlayerID, game.WinnerID, game.LoserID, game.Draw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert game: %v", err)
 	}
@@ -43,8 +43,8 @@ func InsertPlayerQuery(db *sql.DB, player *Player) (sql.Result, error) {
 }
 
 func UpdateGameQuery(db *sql.DB, game *Game) (sql.Result, error) {
-	query := "UPDATE games SET url = ?, rated = ?, game_type = ?, white_player_id = ?, black_player_id = ?, winner_id = ?, loser_id = ?, draw = ? WHERE id = ?"
-	result, err := database.ExecuteMySQLNonQuery(db, query, game.URL, game.Rated, game.GameType, game.WhitePlayer.ID, game.BlackPlayer.ID, game.Winner.ID, game.Loser.ID, game.Draw, game.ID)
+	query := "UPDATE games SET game_type = ?, white_player_id = ?, black_player_id = ?, winner_id = ?, loser_id = ?, draw = ? WHERE id = ?"
+	result, err := database.ExecuteMySQLNonQuery(db, query, game.GameType, game.WhitePlayerID, game.BlackPlayerID, game.WinnerID, game.LoserID, game.Draw, game.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update game: %v", err)
 	}
