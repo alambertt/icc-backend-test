@@ -18,7 +18,7 @@ func GetGameQuery(db *sql.DB, id int) (*sql.Rows, error) {
 }
 
 func GetPlayerQuery(db *sql.DB, id int) (*sql.Rows, error) {
-	query := "SELECT * FROM WHERE id = ?"
+	query := "SELECT * FROM players WHERE id = ?"
 	rows, err := database.ExecuteMySQLQuery(db, query, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get player: %v", err)
@@ -27,7 +27,7 @@ func GetPlayerQuery(db *sql.DB, id int) (*sql.Rows, error) {
 }
 
 func GetRoomsByRateQuery(db *sql.DB, rate int, gameType string) (*sql.Rows, error) {
-	query := "SELECT * FROM rooms WHERE game_type = ? AND player_rate >= ? AND player_rate <= ?"
+	query := "SELECT * FROM rooms WHERE game_type = ? AND player_rate BETWEEN ? AND ?"
 	rows, err := database.ExecuteMySQLQuery(db, query, gameType, rate-constants.ROOM_RATE_ELIGIBILITY, rate+constants.ROOM_RATE_ELIGIBILITY)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get player by rate: %v", err)
@@ -35,16 +35,9 @@ func GetRoomsByRateQuery(db *sql.DB, rate int, gameType string) (*sql.Rows, erro
 	return rows, nil
 }
 
-func GetGameTypeParameter(gameType string) (string, error) {
-	if _, ok := constants.GAME_TYPES[gameType]; !ok {
-		return "", fmt.Errorf("invalid game type: %s", gameType)
-	}
-	return constants.GAME_TYPES[gameType], nil
-}
-
 func InsertGameQuery(db *sql.DB, game *model.Game) (sql.Result, error) {
-	query := "INSERT INTO games (id, url, game_type, white_player_id, black_player_id, winner_id, loser_id, draw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	result, err := database.ExecuteMySQLNonQuery(db, query, game.ID, game.URL, game.GameType, game.WhitePlayerID, game.BlackPlayerID, game.WinnerID, game.LoserID, game.Draw)
+	query := "INSERT INTO games (url, game_type, white_player_id, black_player_id, winner_id, loser_id, draw) VALUES (?, ?, ?, ?, ?, ?, ?)"
+	result, err := database.ExecuteMySQLNonQuery(db, query, game.URL, game.GameType, game.WhitePlayerID, game.BlackPlayerID, game.WinnerID, game.LoserID, game.Draw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert game: %v", err)
 	}
@@ -52,8 +45,8 @@ func InsertGameQuery(db *sql.DB, game *model.Game) (sql.Result, error) {
 }
 
 func InsertPlayerQuery(db *sql.DB, player *model.Player) (sql.Result, error) {
-	query := "INSERT INTO (id, name, bullet_rating, blitz_rating, rapid_rating, classic_rating) VALUES (?, ?, ?, ?, ?, ?)"
-	result, err := database.ExecuteMySQLNonQuery(db, query, player.ID, player.Name, player.BulletRating, player.BlitzRating, player.RapidRating, player.ClassicRating)
+	query := "INSERT INTO players (name, bullet_rating, blitz_rating, rapid_rating, classic_rating, status) VALUES (?, ?, ?, ?, ?, ?)"
+	result, err := database.ExecuteMySQLNonQuery(db, query, player.Name, player.BulletRating, player.BlitzRating, player.RapidRating, player.ClassicRating, player.Status)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert player: %v", err)
 	}
@@ -61,8 +54,8 @@ func InsertPlayerQuery(db *sql.DB, player *model.Player) (sql.Result, error) {
 }
 
 func InsertRoomQuery(db *sql.DB, room *model.Room) (sql.Result, error) {
-	query := "INSERT INTO rooms (id, player_id, player_rate, game_type) VALUES (?, ?, ?, ?)"
-	result, err := database.ExecuteMySQLNonQuery(db, query, room.ID, room.PlayerID, room.PlayerRate, room.GameType)
+	query := "INSERT INTO rooms (player_id, player_rate, game_type) VALUES (?, ?, ?)"
+	result, err := database.ExecuteMySQLNonQuery(db, query, room.PlayerID, room.PlayerRate, room.GameType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert room: %v", err)
 	}
@@ -79,8 +72,8 @@ func UpdateGameQuery(db *sql.DB, game *model.Game) (sql.Result, error) {
 }
 
 func UpdatePlayerQuery(db *sql.DB, player *model.Player) (sql.Result, error) {
-	query := "UPDATE SET name = ?, bullet_rating = ?, blitz_rating = ?, rapid_rating = ?, classic_rating = ? WHERE id = ?"
-	result, err := database.ExecuteMySQLNonQuery(db, query, player.Name, player.BulletRating, player.BlitzRating, player.RapidRating, player.ClassicRating, player.ID)
+	query := "UPDATE players SET name = ?, bullet_rating = ?, blitz_rating = ?, rapid_rating = ?, classic_rating = ?, status = ? WHERE id = ?"
+	result, err := database.ExecuteMySQLNonQuery(db, query, player.Name, player.BulletRating, player.BlitzRating, player.RapidRating, player.ClassicRating, player.Status, player.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update player: %v", err)
 	}
