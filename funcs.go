@@ -3,12 +3,14 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"icc-backend-test/constants"
 	"icc-backend-test/database"
-	"math/rand"
-	"time"
+	"icc-backend-test/model"
+	"icc-backend-test/utils"
+	"icc-backend-test/websocket"
 )
 
-func PairingAlgorithm(player *Player, gameType string) {
+func PairingRequest(player *model.Player, gameType string) {
 	var playerRating int64
 
 	switch gameType {
@@ -34,9 +36,9 @@ func PairingAlgorithm(player *Player, gameType string) {
 	}
 	defer rooms.Close()
 
-	parsedRooms := parseRooms(rooms)
+	parsedRooms := utils.ParseRooms(rooms)
 	if len(parsedRooms) == 0 {
-		room := &Room{
+		room := &model.Room{
 			PlayerID:   player.ID,
 			PlayerRate: playerRating,
 			GameType:   gameType,
@@ -46,52 +48,26 @@ func PairingAlgorithm(player *Player, gameType string) {
 			panic(err)
 		}
 	} else {
-		randomIndex := getRandomNumber(0, len(parsedRooms)-1)
+		randomIndex := utils.GetRandomNumber(0, len(parsedRooms)-1)
 		room := parsedRooms[randomIndex]
 		player2, err := FetchPlayerByID(db, room.PlayerID)
 		if err != nil {
 			panic(err)
 		}
 		game := CreateGame(*player, *player2, gameType, true)
-		SendURLToPlayers(player, player2, game.URL)
-	}
-}
-
-func getRandomNumber(min, max int) int {
-	return rand.Intn(max-min+1) + min
-}
-
-// SendURLToPlayers sends the URL of the game to the players using WebSockets. When the players receive the URL, they can start playing the game. The frontend will use the URL to redirect the players to the game.
-func SendURLToPlayers(player1, player2 *Player, url string) {
-	message := map[string]string{
-		"type": "game_url",
-		"url":  url,
-	}
-
-	// Send URL to white player
-	if err := player1.Conn.WriteJSON(message); err != nil {
-		fmt.Println("Error sending URL to player 1:", err)
-	}
-
-	// Send URL to black player
-	if err := player2.Conn.WriteJSON(message); err != nil {
-		fmt.Println("Error sending URL to player 2:", err)
-	}
-}
-
-func parseRooms(rooms *sql.Rows) []Room {
-	var parsedRooms []Room
-	for rooms.Next() {
-		var room Room
-		if err := rooms.Scan(&room.ID, &room.PlayerID, &room.PlayerRate, &room.GameType); err != nil {
+		websocket.SendURLToPlayers(player, player2, game.URL)
+		_, err = DeleteRoomsByPlayerIDQuery(db, int(player.ID))
+		if err != nil {
 			panic(err)
 		}
-		parsedRooms = append(parsedRooms, room)
+		_, err = DeleteRoomsByPlayerIDQuery(db, int(player2.ID))
+		if err != nil {
+			panic(err)
+		}
 	}
-	return parsedRooms
 }
 
-func GameEnded(playerWinner, playerLoser Player, draw bool, game *Game) {
+func GameEnded(playerWinner, playerLoser model.Player, draw bool, game *model.Game) {
 	//* I assume that in the case of a draw, the ratings of both players remain the same
 	if !draw {
 		game.WinnerID = playerWinner.ID
@@ -112,50 +88,15 @@ func GameEnded(playerWinner, playerLoser Player, draw bool, game *Game) {
 	UpdatePlayerQuery(db, &playerLoser)
 }
 
-func FetchGameByID(db *sql.DB, id int64) (*Game, error) {
-	rows, err := GetGameQuery(db, int(id))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get game: %v", err)
-	}
-	defer rows.Close()
-
-	var game Game
-	if rows.Next() {
-		if err := rows.Scan(&game.ID, &game.GameType, &game.WhitePlayerID, &game.BlackPlayerID, &game.WinnerID, &game.LoserID, &game.Draw); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %v", err)
-		}
-		return &game, nil
-	}
-	return nil, fmt.Errorf("no game found with ID %d", id)
-}
-
-func FetchPlayerByID(db *sql.DB, id int64) (*Player, error) {
-	rows, err := GetPlayerQuery(db, int(id))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get player: %v", err)
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		var player Player
-		if err := rows.Scan(&player.ID, &player.Name, &player.BulletRating, &player.BlitzRating, &player.RapidRating, &player.ClassicRating); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %v", err)
-		}
-
-		return &player, nil
-	}
-	return nil, fmt.Errorf("no player found with ID %d", id)
-}
-
-func CreateGame(playerWhite, playerBlack Player, gameType string, rated bool) *Game {
-	if GameTypes[gameType] == "" {
+func CreateGame(playerWhite, playerBlack model.Player, gameType string, rated bool) *model.Game {
+	if constants.GAME_TYPES[gameType] == "" {
 		panic(fmt.Sprintf("invalid game type: %s", gameType))
 	}
-	game := &Game{
+	game := &model.Game{
 		WhitePlayerID: playerWhite.ID,
 		BlackPlayerID: playerBlack.ID,
-		GameType:      GameTypes[gameType],
-		URL:           createURL(playerWhite, playerBlack),
+		GameType:      constants.GAME_TYPES[gameType],
+		URL:           utils.CreateURL(playerWhite, playerBlack),
 	}
 	db, err := database.ConnectToMySQLDB()
 	if err != nil {
@@ -181,7 +122,50 @@ func CreateGame(playerWhite, playerBlack Player, gameType string, rated bool) *G
 	return fetchedGame
 }
 
-func createURL(playerWhite, playerBlack Player) string {
-	timestamp := time.Now().Unix()
-	return fmt.Sprintf("https://play.chessclub.com/game/%s-vs-%s-%d", playerWhite.Name, playerBlack.Name, timestamp)
+func CancelGameRequest(room *model.Room) {
+	db, err := database.ConnectToMySQLDB()
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	_, err = DeleteRoomQuery(db, room.GameType, int(room.PlayerID))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func FetchGameByID(db *sql.DB, id int64) (*model.Game, error) {
+	rows, err := GetGameQuery(db, int(id))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %v", err)
+	}
+	defer rows.Close()
+
+	var game model.Game
+	if rows.Next() {
+		if err := rows.Scan(&game.ID, &game.GameType, &game.WhitePlayerID, &game.BlackPlayerID, &game.WinnerID, &game.LoserID, &game.Draw); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %v", err)
+		}
+		return &game, nil
+	}
+	return nil, fmt.Errorf("no game found with ID %d", id)
+}
+
+func FetchPlayerByID(db *sql.DB, id int64) (*model.Player, error) {
+	rows, err := GetPlayerQuery(db, int(id))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get player: %v", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var player model.Player
+		if err := rows.Scan(&player.ID, &player.Name, &player.BulletRating, &player.BlitzRating, &player.RapidRating, &player.ClassicRating); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %v", err)
+		}
+
+		return &player, nil
+	}
+	return nil, fmt.Errorf("no player found with ID %d", id)
 }
