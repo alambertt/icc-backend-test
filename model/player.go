@@ -19,26 +19,30 @@ type Player struct {
 
 func (p *Player) ChangeRating(gameType string, up bool) {
 	switch gameType {
-	case "bullet":
+	case constants.GAME_TYPES["bullet"]:
 		if up {
 			p.BulletRating = p.BulletRating + constants.RATING_CHANGE
+		} else {
+			p.BulletRating = p.BulletRating - constants.RATING_CHANGE
 		}
-		p.BulletRating = p.BulletRating - constants.RATING_CHANGE
-	case "blitz":
+	case constants.GAME_TYPES["blitz"]:
 		if up {
 			p.BlitzRating = p.BlitzRating + constants.RATING_CHANGE
+		} else {
+			p.BlitzRating = p.BlitzRating - constants.RATING_CHANGE
 		}
-		p.BlitzRating = p.BlitzRating - constants.RATING_CHANGE
-	case "rapid":
+	case constants.GAME_TYPES["rapid"]:
 		if up {
 			p.RapidRating = p.RapidRating + constants.RATING_CHANGE
+		} else {
+			p.RapidRating = p.RapidRating - constants.RATING_CHANGE
 		}
-		p.RapidRating = p.RapidRating - constants.RATING_CHANGE
-	case "classic":
+	case constants.GAME_TYPES["classic"]:
 		if up {
 			p.ClassicRating = p.ClassicRating + constants.RATING_CHANGE
+		} else {
+			p.ClassicRating = p.ClassicRating - constants.RATING_CHANGE
 		}
-		p.ClassicRating = p.ClassicRating - constants.RATING_CHANGE
 	}
 }
 
