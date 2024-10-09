@@ -81,7 +81,7 @@ func CancelGameRequest(db *sql.DB, room *model.Room) error {
 	return err
 }
 
-func GameEnded(db *sql.DB, playerWinner, playerLoser model.Player, draw bool, game *model.Game) error {
+func GameEnded(db *sql.DB, playerWinner, playerLoser *model.Player, draw bool, game *model.Game) error {
 	//* I assume that in the case of a draw, the ratings of both players remain the same
 	if !draw {
 		game.WinnerID = playerWinner.ID
@@ -97,13 +97,13 @@ func GameEnded(db *sql.DB, playerWinner, playerLoser model.Player, draw bool, ga
 		return err
 	}
 	playerWinner.SetAvailable()
-	_, err = UpdatePlayerQuery(db, &playerWinner)
+	_, err = UpdatePlayerQuery(db, playerWinner)
 	if err != nil {
 		return err
 	}
 
 	playerLoser.SetAvailable()
-	_, err = UpdatePlayerQuery(db, &playerLoser)
+	_, err = UpdatePlayerQuery(db, playerLoser)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func FetchGameByID(db *sql.DB, id int64) (*model.Game, error) {
 
 	var game model.Game
 	if rows.Next() {
-		if err := rows.Scan(&game.ID, &game.GameType, &game.WhitePlayerID, &game.BlackPlayerID, &game.WinnerID, &game.LoserID, &game.Draw); err != nil {
+		if err := rows.Scan(&game.ID, &game.URL, &game.GameType, &game.WhitePlayerID, &game.BlackPlayerID, &game.WinnerID, &game.LoserID, &game.Draw); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}
 		return &game, nil
@@ -176,7 +176,7 @@ func FetchPlayerByID(db *sql.DB, id int64) (*model.Player, error) {
 
 	if rows.Next() {
 		var player model.Player
-		if err := rows.Scan(&player.ID, &player.Name, &player.BulletRating, &player.BlitzRating, &player.RapidRating, &player.ClassicRating); err != nil {
+		if err := rows.Scan(&player.ID, &player.Name, &player.BulletRating, &player.BlitzRating, &player.RapidRating, &player.ClassicRating, &player.Status); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}
 

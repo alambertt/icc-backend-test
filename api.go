@@ -107,7 +107,7 @@ func gameEndedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := GameEnded(db, *playerWinner, *playerLoser, req.Draw, game); err != nil {
+	if err := GameEnded(db, playerWinner, playerLoser, req.Draw, game); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
