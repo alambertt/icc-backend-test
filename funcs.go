@@ -10,7 +10,7 @@ import (
 	"icc-backend-test/websocket"
 )
 
-func PairingRequest(player *model.Player, gameType string) {
+func PairingGameRequest(player *model.Player, gameType string) (string, error) {
 	var playerRating int64
 
 	switch gameType {
@@ -26,13 +26,13 @@ func PairingRequest(player *model.Player, gameType string) {
 
 	db, err := database.ConnectToMySQLDB()
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	defer db.Close()
 
 	rooms, err := GetRoomsByRateQuery(db, int(playerRating), gameType)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	defer rooms.Close()
 
@@ -45,81 +45,42 @@ func PairingRequest(player *model.Player, gameType string) {
 		}
 		_, err := InsertRoomQuery(db, room)
 		if err != nil {
-			panic(err)
+			return "", err
 		}
+		return "", nil //! Return empty string because the player is waiting for an opponent. The frontend will display a message to the player telling him that he is waiting for an opponent.
 	} else {
 		randomIndex := utils.GetRandomNumber(0, len(parsedRooms)-1)
 		room := parsedRooms[randomIndex]
 		player2, err := FetchPlayerByID(db, room.PlayerID)
 		if err != nil {
-			panic(err)
+			return "", err
 		}
-		game := CreateGame(*player, *player2, gameType, true)
-		websocket.SendURLToPlayers(player, player2, game.URL)
+
+		for player2.IsPlaying() {
+			parsedRooms = utils.DeleteRoomFromArray(parsedRooms, randomIndex)
+			randomIndex = utils.GetRandomNumber(0, len(parsedRooms)-1)
+			room = parsedRooms[randomIndex]
+			player2, err = FetchPlayerByID(db, room.PlayerID)
+			if err != nil {
+				return "", err
+			}
+		}
+		game, err := CreateGame(*player, *player2, gameType, true)
+		if err != nil {
+			return "", err
+		}
+		// Send URL to player 2 using WebSockets because player 1 is the one who requested the game
+		websocket.SendURLToPlayer(player2, game.URL)
 		_, err = DeleteRoomsByPlayerIDQuery(db, int(player.ID))
 		if err != nil {
-			panic(err)
+			return "", err
 		}
 		_, err = DeleteRoomsByPlayerIDQuery(db, int(player2.ID))
 		if err != nil {
-			panic(err)
+			return "", err
 		}
+		return game.URL, nil
 	}
-}
-
-func GameEnded(playerWinner, playerLoser model.Player, draw bool, game *model.Game) {
-	//* I assume that in the case of a draw, the ratings of both players remain the same
-	if !draw {
-		game.WinnerID = playerWinner.ID
-		game.LoserID = playerLoser.ID
-	} else {
-		game.Draw = true
-	}
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-	UpdateGameQuery(db, game)
-
-	playerWinner.ChangeRating(game.GameType, true)
-	playerLoser.ChangeRating(game.GameType, false)
-	UpdatePlayerQuery(db, &playerWinner)
-	UpdatePlayerQuery(db, &playerLoser)
-}
-
-func CreateGame(playerWhite, playerBlack model.Player, gameType string, rated bool) *model.Game {
-	if constants.GAME_TYPES[gameType] == "" {
-		panic(fmt.Sprintf("invalid game type: %s", gameType))
-	}
-	game := &model.Game{
-		WhitePlayerID: playerWhite.ID,
-		BlackPlayerID: playerBlack.ID,
-		GameType:      constants.GAME_TYPES[gameType],
-		URL:           utils.CreateURL(playerWhite, playerBlack),
-	}
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	res, err := InsertGameQuery(db, game)
-	if err != nil {
-		panic(err)
-	}
-
-	lastInsertID, err := res.LastInsertId()
-	if err != nil {
-		panic(fmt.Sprintf("failed to get last insert ID: %v", err))
-	}
-
-	fetchedGame, err := FetchGameByID(db, lastInsertID)
-	if err != nil {
-		panic(err)
-	}
-
-	return fetchedGame
 }
 
 func CancelGameRequest(room *model.Room) {
@@ -133,6 +94,85 @@ func CancelGameRequest(room *model.Room) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func GameEnded(playerWinner, playerLoser model.Player, draw bool, game *model.Game) error {
+	//* I assume that in the case of a draw, the ratings of both players remain the same
+	if !draw {
+		game.WinnerID = playerWinner.ID
+		game.LoserID = playerLoser.ID
+		playerWinner.ChangeRating(game.GameType, true)
+		playerLoser.ChangeRating(game.GameType, false)
+	} else {
+		game.Draw = true
+	}
+	db, err := database.ConnectToMySQLDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = UpdateGameQuery(db, game)
+	if err != nil {
+		return err
+	}
+	playerWinner.SetAvailable()
+	_, err = UpdatePlayerQuery(db, &playerWinner)
+	if err != nil {
+		return err
+	}
+
+	playerLoser.SetAvailable()
+	_, err = UpdatePlayerQuery(db, &playerLoser)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func CreateGame(playerWhite, playerBlack model.Player, gameType string, rated bool) (*model.Game, error) {
+	if constants.GAME_TYPES[gameType] == "" {
+		return nil, fmt.Errorf("invalid game type: %s", gameType)
+	}
+	game := &model.Game{
+		WhitePlayerID: playerWhite.ID,
+		BlackPlayerID: playerBlack.ID,
+		GameType:      constants.GAME_TYPES[gameType],
+		URL:           utils.CreateURL(playerWhite, playerBlack),
+	}
+	db, err := database.ConnectToMySQLDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	playerWhite.SetPlaying()
+	playerBlack.SetPlaying()
+	_, err = UpdatePlayerQuery(db, &playerWhite)
+	if err != nil {
+		return nil, err
+	}
+	_, err = UpdatePlayerQuery(db, &playerBlack)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := InsertGameQuery(db, game)
+	if err != nil {
+		return nil, err
+	}
+
+	lastInsertID, err := res.LastInsertId()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get last insert ID: %v", err))
+	}
+
+	fetchedGame, err := FetchGameByID(db, lastInsertID)
+	if err != nil {
+		return nil, err
+	}
+
+	return fetchedGame, nil
 }
 
 func FetchGameByID(db *sql.DB, id int64) (*model.Game, error) {
@@ -168,4 +208,35 @@ func FetchPlayerByID(db *sql.DB, id int64) (*model.Player, error) {
 		return &player, nil
 	}
 	return nil, fmt.Errorf("no player found with ID %d", id)
+}
+
+func CreateNewPlayer(name string) (*model.Player, error) {
+	player := &model.Player{
+		Name:          name,
+		BulletRating:  1500,
+		BlitzRating:   1500,
+		RapidRating:   1500,
+		ClassicRating: 1500,
+		Status:        "available",
+	}
+
+	db, err := database.ConnectToMySQLDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	res, err := InsertPlayerQuery(db, player)
+	if err != nil {
+		return nil, err
+	}
+
+	lastInsertID, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last insert ID: %v", err)
+	}
+
+	player.ID = lastInsertID
+
+	return player, nil
 }

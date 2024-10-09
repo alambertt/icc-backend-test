@@ -29,3 +29,8 @@ func ParseRooms(rooms *sql.Rows) []model.Room {
 	}
 	return parsedRooms
 }
+
+// DeleteRoomFromArray deletes a room from an array of rooms. The function receives the array of rooms and the index of the room to delete. The function returns the array of rooms without the room that was deleted.
+func DeleteRoomFromArray(rooms []model.Room, index int) []model.Room {
+	return append(rooms[:index], rooms[index+1:]...)
+}
