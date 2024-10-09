@@ -33,7 +33,7 @@ func pairingGameRequestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := PairingGameRequest(player, req.GameType)
+	url, err := PairingGameRequest(db, player, req.GameType)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -65,7 +65,7 @@ func cancelGameRequestHandler(w http.ResponseWriter, r *http.Request) {
 		GameType: req.GameType,
 	}
 
-	CancelGameRequest(room)
+	CancelGameRequest(db, room)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -107,7 +107,7 @@ func gameEndedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := GameEnded(*playerWinner, *playerLoser, req.Draw, game); err != nil {
+	if err := GameEnded(db, *playerWinner, *playerLoser, req.Draw, game); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -147,7 +147,7 @@ func createGameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	game, err := CreateGame(*playerWhite, *playerBlack, req.GameType, req.Rated)
+	game, err := CreateGame(db, *playerWhite, *playerBlack, req.GameType, req.Rated)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -214,7 +214,13 @@ func createNewPlayerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	player, err := CreateNewPlayer(req.Name)
+	db, err := database.ConnectToMySQLDB()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	player, err := CreateNewPlayer(db, req.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

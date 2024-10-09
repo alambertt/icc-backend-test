@@ -4,13 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"icc-backend-test/constants"
-	"icc-backend-test/database"
 	"icc-backend-test/model"
 	"icc-backend-test/utils"
 	"icc-backend-test/websocket"
 )
 
-func PairingGameRequest(player *model.Player, gameType string) (string, error) {
+func PairingGameRequest(db *sql.DB, player *model.Player, gameType string) (string, error) {
 	var playerRating int64
 
 	switch gameType {
@@ -23,12 +22,6 @@ func PairingGameRequest(player *model.Player, gameType string) (string, error) {
 	case "classic":
 		playerRating = player.ClassicRating
 	}
-
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		return "", err
-	}
-	defer db.Close()
 
 	rooms, err := GetRoomsByRateQuery(db, int(playerRating), gameType)
 	if err != nil {
@@ -65,7 +58,7 @@ func PairingGameRequest(player *model.Player, gameType string) (string, error) {
 				return "", err
 			}
 		}
-		game, err := CreateGame(*player, *player2, gameType, true)
+		game, err := CreateGame(db, *player, *player2, gameType, true)
 		if err != nil {
 			return "", err
 		}
@@ -83,20 +76,12 @@ func PairingGameRequest(player *model.Player, gameType string) (string, error) {
 	}
 }
 
-func CancelGameRequest(room *model.Room) {
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	_, err = DeleteRoomQuery(db, room.GameType, int(room.PlayerID))
-	if err != nil {
-		panic(err)
-	}
+func CancelGameRequest(db *sql.DB, room *model.Room) error {
+	_, err := DeleteRoomQuery(db, room.GameType, int(room.PlayerID))
+	return err
 }
 
-func GameEnded(playerWinner, playerLoser model.Player, draw bool, game *model.Game) error {
+func GameEnded(db *sql.DB, playerWinner, playerLoser model.Player, draw bool, game *model.Game) error {
 	//* I assume that in the case of a draw, the ratings of both players remain the same
 	if !draw {
 		game.WinnerID = playerWinner.ID
@@ -106,13 +91,8 @@ func GameEnded(playerWinner, playerLoser model.Player, draw bool, game *model.Ga
 	} else {
 		game.Draw = true
 	}
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
 
-	_, err = UpdateGameQuery(db, game)
+	_, err := UpdateGameQuery(db, game)
 	if err != nil {
 		return err
 	}
@@ -130,7 +110,7 @@ func GameEnded(playerWinner, playerLoser model.Player, draw bool, game *model.Ga
 	return nil
 }
 
-func CreateGame(playerWhite, playerBlack model.Player, gameType string, rated bool) (*model.Game, error) {
+func CreateGame(db *sql.DB, playerWhite, playerBlack model.Player, gameType string, rated bool) (*model.Game, error) {
 	if constants.GAME_TYPES[gameType] == "" {
 		return nil, fmt.Errorf("invalid game type: %s", gameType)
 	}
@@ -140,15 +120,10 @@ func CreateGame(playerWhite, playerBlack model.Player, gameType string, rated bo
 		GameType:      constants.GAME_TYPES[gameType],
 		URL:           utils.CreateURL(playerWhite, playerBlack),
 	}
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
 
 	playerWhite.SetPlaying()
 	playerBlack.SetPlaying()
-	_, err = UpdatePlayerQuery(db, &playerWhite)
+	_, err := UpdatePlayerQuery(db, &playerWhite)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +185,7 @@ func FetchPlayerByID(db *sql.DB, id int64) (*model.Player, error) {
 	return nil, fmt.Errorf("no player found with ID %d", id)
 }
 
-func CreateNewPlayer(name string) (*model.Player, error) {
+func CreateNewPlayer(db *sql.DB, name string) (*model.Player, error) {
 	player := &model.Player{
 		Name:          name,
 		BulletRating:  1500,
@@ -219,12 +194,6 @@ func CreateNewPlayer(name string) (*model.Player, error) {
 		ClassicRating: 1500,
 		Status:        "available",
 	}
-
-	db, err := database.ConnectToMySQLDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
 
 	res, err := InsertPlayerQuery(db, player)
 	if err != nil {
