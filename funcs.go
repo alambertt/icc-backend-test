@@ -9,6 +9,9 @@ import (
 	"icc-backend-test/websocket"
 )
 
+// PairingGameRequest handles the logic for pairing a player with an opponent for a game.
+// It takes a database connection, a player object, and the game type as input parameters.
+// The function returns the URL of the created game or an error if any occurs.
 func PairingGameRequest(db *sql.DB, player *model.Player, gameType string) (string, error) {
 	var playerRating int64
 
@@ -42,6 +45,7 @@ func PairingGameRequest(db *sql.DB, player *model.Player, gameType string) (stri
 		}
 		return "", nil //! Return empty string because the player is waiting for an opponent. The frontend will display a message to the player telling him that he is waiting for an opponent.
 	} else {
+		// If rooms are available, select a random room and fetch the opponent player.
 		randomIndex := utils.GetRandomNumber(0, len(parsedRooms)-1)
 		room := parsedRooms[randomIndex]
 		player2, err := FetchPlayerByID(db, room.PlayerID)
@@ -49,6 +53,7 @@ func PairingGameRequest(db *sql.DB, player *model.Player, gameType string) (stri
 			return "", err
 		}
 
+		// Ensure the selected player is not already playing.
 		for player2.IsPlaying() {
 			parsedRooms = utils.DeleteRoomFromArray(parsedRooms, randomIndex)
 			randomIndex = utils.GetRandomNumber(0, len(parsedRooms)-1)
